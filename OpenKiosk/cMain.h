@@ -8,14 +8,11 @@ public:
 	~cMain();
 
 public:
-	int nFieldWidth = 10;
-	int nFieldHeight = 10;
-	wxButton** btn;
-	int* nField = nullptr; // array of integers knowing whether a mine exists there or not.
-	bool bFirstClick = true; // know if its the first click so the player doesnt loose immediately (this is when we will populate the mine field)
+	wxButton *m_btn1 = nullptr;
+	wxTextCtrl *m_txt1 = nullptr;
+	wxListBox *m_list1 = nullptr;
 
 	void OnButtonClicked(wxCommandEvent &evt);
-
 
 	wxDECLARE_EVENT_TABLE();
 };
