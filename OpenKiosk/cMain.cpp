@@ -3,146 +3,126 @@
 #include <string>
 
 
-LONG GetDWORDRegKey(HKEY hKey, const std::wstring& strValueName, DWORD& nValue, DWORD nDefaultValue);
-LONG GetBoolRegKey(HKEY hKey, const std::wstring& strValueName, bool& bValue, bool bDefaultValue);
-LONG GetStringRegKey(HKEY hKey, const std::wstring& strValueName, std::wstring& strValue, const std::wstring& strDefaultValue);
-LONG SetDWORDRegKey(HKEY hKey, const std::wstring& strValueName, DWORD nValue);
-bool TaskManagerIsEnabled();
-void DisableTaskManager();
-void EnableTaskManager();
+
+bool loggedIn = false;
+bool HookKeys = false;
+LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam);
 
 wxBEGIN_EVENT_TABLE(cMain, wxFrame)
 	EVT_BUTTON(10001, OnButtonClicked)
-
+    EVT_TEXT_ENTER(10002, OnButtonClicked)
 wxEND_EVENT_TABLE()
 
-cMain::cMain() : wxFrame(nullptr, wxID_ANY, "The Title", wxPoint(30,30), wxSize(800,600))
+cMain::cMain() : wxFrame(nullptr, wxID_ANY, "OpenKiosk", wxPoint(30,30), wxSize(800,600))
 {
-	m_btn1 = new wxButton(this, 10001, "Click Me", wxPoint(10, 10), wxSize(150, 50));
-	m_txt1 = new wxTextCtrl(this, wxID_ANY, "", wxPoint(10, 70), wxSize(300, 30));
-	m_list1 = new wxListBox(this, wxID_ANY, wxPoint(10, 110), wxSize(300, 300));
-    if (TaskManagerIsEnabled())
+    m_pnl1 = new wxPanel(this,wxID_ANY,wxPoint(0,0));
+    ShowFullScreen(true);
+    SetWindowStyle(wxSTAY_ON_TOP);
+    m_txt1 = new wxTextCtrl(this->m_pnl1, wxID_ANY, "", wxPoint(GetSize().GetWidth() / 2 - 150, GetSize().GetHeight() / 2), wxSize(300, 30));
+    m_txt2 = new wxTextCtrl(this->m_pnl1, 10002, "", wxPoint(GetSize().GetWidth() / 2 - 150, GetSize().GetHeight() / 2 + 50), wxSize(300, 30));
+    m_btn1 = new wxButton(this->m_pnl1, 10001, "Login", wxPoint(GetSize().GetWidth() / 2 - 150/2, GetSize().GetHeight() / 2 + 100), wxSize(150, 30));
+	//m_list1 = new wxListBox(this, wxID_ANY, wxPoint(10, 110), wxSize(300, 300));
+    
+    HookKeyboard();
+    m_txt2->SetWindowStyle(wxTE_PASSWORD);
+    m_txt2->Refresh();
+    m_txt1->SetFocus();
+    wxPlatformInfo plat;
+    if (plat.GetOperatingSystemFamilyName() == "Windows")
     {
-        DisableTaskManager();
-        if (TaskManagerIsEnabled()) 
-        {
-            HKEY hKey;//HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableTaskMgr = 1(DWORD)
-            LONG lRes = RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies", 0, KEY_READ, &hKey);
-            RegCreateKeyEx(hKey, L"System", NULL, NULL, REG_OPTION_NON_VOLATILE, KEY_ALL_ACCESS, NULL, &hKey, NULL);
-            DisableTaskManager();
-
-            if (TaskManagerIsEnabled())
-                wxMessageBox("Tried to disable task manager and failed. Do you need administrative privileges?");
-            else
-                wxMessageBox("Disabled Task Manager");
-        }
-        else
-            wxMessageBox("Disabled Task Manager");
+        bool hidepwd = true;
+        HWND hwnd = (HWND)m_txt2->GetHandle();
+        SendMessage(hwnd, EM_SETPASSWORDCHAR, hidepwd ? 0x25cf : 0, 0); // 0x25cf is . character
+        m_txt2->Refresh();
     }
 }
+
 
 cMain::~cMain()
 {
 
-    EnableTaskManager();
-    if (TaskManagerIsEnabled())
-        wxMessageBox("Enabled Task Manager");
-
-    HKEY hKey;//HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableTaskMgr = 1(DWORD)
-    LONG lRes = RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies", 0, KEY_READ, &hKey);
-    RegCloseKey(hKey);
-    lRes = RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", 0, KEY_READ, &hKey);
-    RegCloseKey(hKey);
 }
 
+
+void cMain::OnEnterPressed(wxCommandEvent& evt2)
+{
+
+}
 
 void cMain::OnButtonClicked(wxCommandEvent& evt)
 {
+    if (!loggedIn)
+    {
+        if (m_txt1->GetValue() == "miguel" && m_txt2->GetValue() == "dino")
+            ChangeSessionState();
+    }
+    else
+        ChangeSessionState();
 
-	//m_list1->AppendString(std::to_string(strValueOfBinDir));
+    m_txt1->SetValue("");
+    m_txt2->SetValue("");
 	evt.Skip(); // skip checking the rest of the parents events
 }
-
-
-
-void DisableTaskManager()
+void cMain::ChangeSessionState()
 {
-    HKEY hKey;//HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableTaskMgr = 1(DWORD)
-    LONG lRes = RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", 0, KEY_WRITE, &hKey);
-    SetDWORDRegKey(hKey, L"DisableTaskMgr", (DWORD)1);
-}
 
-void EnableTaskManager()
-{
-    HKEY hKey;//HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableTaskMgr = 1(DWORD)
-    LONG lRes = RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", 0, KEY_WRITE, &hKey);
-    SetDWORDRegKey(hKey, L"DisableTaskMgr", (DWORD)0);
-
-}
-LONG GetDWORDRegKey(HKEY hKey, const std::wstring& strValueName, DWORD& nValue, DWORD nDefaultValue)
-{
-    nValue = nDefaultValue;
-    DWORD dwBufferSize(sizeof(DWORD));
-    DWORD nResult(0);
-    LONG nError = ::RegQueryValueExW(hKey, strValueName.c_str(), 0, NULL, reinterpret_cast<LPBYTE>(&nResult), &dwBufferSize);
-
-    if (ERROR_SUCCESS == nError)
-    {
-        nValue = nResult;
+    if (loggedIn) { // you are logged in, process the log out
+        SetWindowStyle(wxSTAY_ON_TOP);
+        HookKeys = false;
+        m_txt1->Show();
+        m_txt2->Show();
+        m_btn1->SetPosition(wxPoint(m_txt2->GetPosition().x + 150 / 2, m_txt2->GetPosition().y + 50));
+        m_btn1->SetLabelText("Login");
+        loggedIn = false;
+        ShowFullScreen(true);
+        m_txt1->SetFocus();
     }
-    return nError;
-}
-LONG SetDWORDRegKey(HKEY hKey, const std::wstring& strValueName, DWORD nValue)
-{
-    DWORD nResult(0);
-    LONG nError = RegSetValueEx(hKey, strValueName.c_str(), NULL, REG_DWORD, (LPBYTE)&nValue, sizeof(DWORD));
-
-    if (ERROR_SUCCESS == nError)
-    {
-        nValue = nResult;
+    else { // you are logged out, process the log in
+        ShowFullScreen(false);
+        Hide();
+        HookKeys = false;
+        SetWindowStyle(wxDEFAULT_FRAME_STYLE);
+        SetSize(wxRect(GetSize().GetWidth(), GetSize().GetHeight(), 400, 400));
+        m_txt1->Hide();
+        m_txt2->Hide();
+        m_btn1->SetPosition(wxPoint(GetSize().GetWidth() / 2 - 150 / 2, GetSize().GetHeight() / 2 + 90));
+        m_btn1->SetLabelText("Logout");
+        ::InvalidateRect(NULL, NULL, true);
+        Centre();
+        Show();
+        loggedIn = true;
     }
-    return nError;
 }
 
-LONG GetBoolRegKey(HKEY hKey, const std::wstring& strValueName, bool& bValue, bool bDefaultValue)
+void cMain::HookKeyboard()
 {
-    DWORD nDefValue((bDefaultValue) ? 1 : 0);
-    DWORD nResult(nDefValue);
-    LONG nError = GetDWORDRegKey(hKey, strValueName.c_str(), nResult, nDefValue);
-    if (ERROR_SUCCESS == nError)
+
+    static HHOOK hook_keys;
+    hook_keys = SetWindowsHookEx(WH_KEYBOARD_LL, LLKeyboardProc, 0, 0);
+}
+
+LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam)
+{
+    PKBDLLHOOKSTRUCT hookstruct;
+
+    if (nCode == HC_ACTION)
     {
-        bValue = (nResult != 0) ? true : false;
+        switch (wParam)
+        {
+        case WM_KEYDOWN: case WM_SYSKEYDOWN:
+        case WM_KEYUP: case WM_SYSKEYUP:
+
+            hookstruct = (PKBDLLHOOKSTRUCT)lParam;
+            if (HookKeys)
+                if (hookstruct->vkCode == 9) /* pesky Windows button */
+                {
+                    return 1;
+                }
+                else if (hookstruct->vkCode == 91)
+                    return 1;
+                else
+                    return CallNextHookEx(NULL, nCode, wParam, lParam);
+        }
     }
-    return nError;
-}
-
-
-LONG GetStringRegKey(HKEY hKey, const std::wstring& strValueName, std::wstring& strValue, const std::wstring& strDefaultValue)
-{
-    strValue = strDefaultValue;
-    WCHAR szBuffer[512];
-    DWORD dwBufferSize = sizeof(szBuffer);
-    ULONG nError;
-    nError = RegQueryValueExW(hKey, strValueName.c_str(), 0, NULL, (LPBYTE)szBuffer, &dwBufferSize);
-    if (ERROR_SUCCESS == nError)
-    {
-        strValue = szBuffer;
-    }
-    return nError;
-}
-
-bool TaskManagerIsEnabled()
-{
-    bool result = false;
-
-    HKEY hKey;//HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Policies\System\DisableTaskMgr = 1(DWORD)
-    LONG lRes = RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System", 0, KEY_READ, &hKey);
-    bool bExistsAndSuccess(lRes == ERROR_SUCCESS);
-    bool bDoesNotExistsSpecifically(lRes == ERROR_FILE_NOT_FOUND);
-    DWORD strValueOfBinDir;
-    std::wstring strKeyDefaultValue;
-    GetDWORDRegKey(hKey, L"DisableTaskMgr", strValueOfBinDir, (DWORD)"1"); //check if it is a 1, returns 1 if true, 0 if false    
-    if (std::to_string(strValueOfBinDir) != '1')
-        result = true;
-    return result;
+    return CallNextHookEx(NULL, nCode, wParam, lParam);
 }
